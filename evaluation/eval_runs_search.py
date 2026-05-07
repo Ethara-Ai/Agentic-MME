@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 import traceback
 from pathlib import Path
@@ -14,6 +15,85 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from common_utils import read_json, write_json, ensure_dir, image_to_data_url, make_openai_client, list_transformed_pngs
 from verifiers import dispatch_verifier
+
+
+class _LiteLLMClient:
+    """Wrapper around litellm.completion() that exposes OpenAI-compatible interface."""
+
+    def __init__(self, model: str, api_key: str = "", base_model: str = ""):
+        import litellm
+        litellm.drop_params = True
+        litellm.modify_params = True
+        litellm.num_retries = 3
+        self._model = model
+        self._api_key = api_key or None
+        self._base_model = base_model
+        self._total_cost = 0.0
+        self._total_calls = 0
+        self._total_prompt_tokens = 0
+        self._total_completion_tokens = 0
+        self.chat = self
+
+        if base_model:
+            litellm.register_model({
+                model: {
+                    "litellm_provider": "bedrock",
+                    "mode": "chat",
+                    "base_model": f"bedrock/{base_model}",
+                }
+            })
+            self._cost_base_model = None
+            for candidate in [f"bedrock/{base_model}", base_model]:
+                if candidate in litellm.model_cost:
+                    self._cost_base_model = candidate
+                    break
+            if self._cost_base_model:
+                print(f"[Judge Cost] Pricing via: {self._cost_base_model}")
+        else:
+            self._cost_base_model = None
+
+    @property
+    def completions(self):
+        return self
+
+    def create(self, *, model: str = "", messages: Any = None, **kwargs) -> Any:
+        import litellm
+        kwargs.pop("temperature", None)
+        kwargs.pop("top_p", None)
+        kwargs.pop("top_k", None)
+        call_kwargs: Dict[str, Any] = dict(
+            model=model or self._model,
+            messages=messages,
+            timeout=300,
+            **kwargs,
+        )
+        if self._api_key:
+            call_kwargs["api_key"] = self._api_key
+        m = call_kwargs["model"]
+        if "arn:aws:" in m:
+            parts = m.split(":")
+            if len(parts) > 3:
+                call_kwargs["aws_region_name"] = parts[3]
+        resp = litellm.completion(**call_kwargs)
+        self._total_calls += 1
+        if getattr(resp, "usage", None):
+            self._total_prompt_tokens += getattr(resp.usage, "prompt_tokens", 0) or 0
+            self._total_completion_tokens += getattr(resp.usage, "completion_tokens", 0) or 0
+        try:
+            cost = litellm.completion_cost(completion_response=resp, base_model=self._cost_base_model or None)
+            self._total_cost += cost
+        except Exception:
+            pass
+        return resp
+
+    def print_cost_summary(self):
+        print(f"\n{'='*60}")
+        print(f"[Judge Cost Summary]")
+        print(f"  Model: {self._model}")
+        print(f"  Total API calls: {self._total_calls}")
+        print(f"  Total tokens: {self._total_prompt_tokens} prompt + {self._total_completion_tokens} completion")
+        print(f"  Total cost: ${self._total_cost:.6f}")
+        print(f"{'='*60}\n")
 
 def run_visual_judge(client: Any, judge_model: str, question: str, image_path: Path) -> str:
     """
@@ -1010,6 +1090,9 @@ def main():
     ap.add_argument("--base_url", type=str, default="")
     ap.add_argument("--api_config", type=str, default="")
     ap.add_argument("--out_json", type=str, default="", help="Output JSON path. Default: runs/scores/{mode}_{model}_scored.json")
+    ap.add_argument("--litellm", action="store_true", help="Use LiteLLM for judge (supports Bedrock, etc.)")
+    ap.add_argument("--judge_api_config", type=str, default="", help="API config key name from configs/api.json 'models' dict for judge")
+    ap.add_argument("--judge_base_model", type=str, default="", help="Base model name for cost tracking (e.g. anthropic.claude-opus-4-20250514-v1:0)")
     
     # Sharding and skip options
     ap.add_argument("--skip_existing", action="store_true", help="Skip runs that already have result_scored.json")
@@ -1018,7 +1101,22 @@ def main():
     
     args = ap.parse_args()
 
-    client = make_openai_client(api_key=args.api_key or None, base_url=args.base_url or None, api_config=Path(args.api_config) if args.api_config else None)
+    if args.litellm:
+        judge_model = args.judge_model
+        judge_api_key = args.api_key or ""
+        judge_base_model = args.judge_base_model or ""
+        if args.judge_api_config and args.api_config:
+            cfg = read_json(Path(args.api_config))
+            model_cfg = cfg.get("models", {}).get(args.judge_api_config, {})
+            if model_cfg:
+                judge_model = model_cfg.get("model", judge_model)
+                judge_api_key = model_cfg.get("api_key", judge_api_key)
+                judge_base_model = judge_base_model or model_cfg.get("base_model", "")
+        client = _LiteLLMClient(model=judge_model, api_key=judge_api_key, base_model=judge_base_model)
+        args.judge_model = judge_model
+        print(f"[Judge] Using LiteLLM with model: {judge_model}")
+    else:
+        client = make_openai_client(api_key=args.api_key or None, base_url=args.base_url or None, api_config=Path(args.api_config) if args.api_config else None)
 
     runs_dir = Path(args.runs_dir)
     # Include both complete runs (with run_meta.json) and incomplete runs (with orig.png but no run_meta.json)
@@ -1611,6 +1709,9 @@ def main():
     
     write_json(out_path, output_data)
     print("Wrote:", out_path)
+
+    if hasattr(client, "print_cost_summary"):
+        client.print_cost_summary()
 
 if __name__ == "__main__":
     main()

@@ -1,34 +1,35 @@
 {
   "_comment": "API configuration - copy to api.json and fill in your keys",
-  
+
   "_openai_example": {
     "provider": "openai",
     "api_key": "sk-xxx",
     "base_url": "",
     "model": "gpt-4o"
   },
-  
-  "_openai_proxy_example": {
-    "provider": "openai",
-    "api_key": "sk-xxx",
-    "base_url": "",
-    "model": "gpt-5-mini"
+
+  "_bedrock_example": {
+    "provider": "bedrock",
+    "api_key": "YOUR_BEDROCK_API_KEY",
+    "model": "bedrock/converse/arn:aws:bedrock:us-east-1:123456789:application-inference-profile/your-profile-id",
+    "base_model": "anthropic.claude-sonnet-4-20250514-v1:0"
   },
-  
-  "_gemini_example": {
-    "provider": "gemini",
-    "api_key": "AIza...",
-    "model": "gemini-2.0-flash"
-  },
-  
-  "_claude_example": {
-    "provider": "claude",
-    "api_key": "sk-ant-...",
-    "model": "claude-sonnet-4-20250514"
-  },
-  
+
   "provider": "openai",
   "api_key": "YOUR_API_KEY_HERE",
   "base_url": "",
-  "model": "gpt-5-mini"
+  "model": "gpt-5-mini",
+
+  "models": {
+    "kimi": {
+      "api_key": "YOUR_BEDROCK_API_KEY",
+      "model": "bedrock/converse/arn:aws:bedrock:us-east-2:426628337772:application-inference-profile/YOUR_KIMI_PROFILE_ID",
+      "base_model": "moonshotai.kimi-k2.5"
+    },
+    "nova": {
+      "api_key": "YOUR_BEDROCK_API_KEY",
+      "model": "bedrock/converse/arn:aws:bedrock:us-east-1:426628337772:application-inference-profile/YOUR_NOVA_PROFILE_ID",
+      "base_model": "amazon.nova-pro-v1:0"
+    }
+  }
 }

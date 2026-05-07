@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import pathlib
+import random
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -129,8 +130,8 @@ def _write_cache(cache_path: str, obj: Dict[str, Any]) -> None:
     os.replace(tmp, cache_path)
 
 
-def _post_json_with_retry(url: str, api_key: str, payload: Dict[str, Any], timeout_s: int, max_retries: int = 3) -> Dict[str, Any]:
-    """POST JSON with automatic retry on timeout/5xx errors."""
+def _post_json_with_retry(url: str, api_key: str, payload: Dict[str, Any], timeout_s: int, max_retries: int = 10) -> Dict[str, Any]:
+    """POST JSON with automatic retry on timeout/5xx/429 errors."""
     headers = {
         "X-API-KEY": api_key,
         "Content-Type": "application/json",
@@ -141,11 +142,23 @@ def _post_json_with_retry(url: str, api_key: str, payload: Dict[str, Any], timeo
         try:
             r = requests.post(url, headers=headers, json=payload, timeout=timeout_s)
             if r.status_code >= 500:
-                # Server error, retry
                 last_error = RuntimeError(f"HTTP {r.status_code} from {url}: {r.text[:500]}")
                 if attempt < max_retries - 1:
-                    wait_time = 5 * (attempt + 1)  # 5s, 10s, 15s
+                    wait_time = 5 * (attempt + 1)
                     print(f"[Search] Server error {r.status_code}, retrying in {wait_time}s... (attempt {attempt + 1}/{max_retries})")
+                    time.sleep(wait_time)
+                    continue
+                raise last_error
+            if r.status_code == 429:
+                retry_after = r.headers.get("Retry-After")
+                if retry_after and retry_after.isdigit():
+                    wait_time = int(retry_after)
+                else:
+                    wait_time = min(5 * (2 ** attempt), 120)
+                wait_time *= (1 + random.uniform(0, 0.25))
+                last_error = RuntimeError(f"HTTP 429 rate limit from {url}")
+                if attempt < max_retries - 1:
+                    print(f"[Search] Rate limited (429), waiting {wait_time:.1f}s... (attempt {attempt + 1}/{max_retries})")
                     time.sleep(wait_time)
                     continue
                 raise last_error
@@ -174,7 +187,7 @@ def _post_json_with_retry(url: str, api_key: str, payload: Dict[str, Any], timeo
 
 def _post_json(url: str, api_key: str, payload: Dict[str, Any], timeout_s: int) -> Dict[str, Any]:
     """POST JSON with automatic retry."""
-    return _post_json_with_retry(url, api_key, payload, timeout_s, max_retries=3)
+    return _post_json_with_retry(url, api_key, payload, timeout_s, max_retries=10)
 
 
 def _compress_image_for_upload(image_path: str, max_size_bytes: int = 30 * 1024 * 1024) -> bytes:
@@ -547,7 +560,7 @@ def google_lens_search(
     return resp, _compact_serper_lens(resp), final_url
 
 
-def jina_read(url: str, api_key: Optional[str] = None, timeout_s: int = 30, max_retries: int = 3) -> str:
+def jina_read(url: str, api_key: Optional[str] = None, timeout_s: int = 30, max_retries: int = 10) -> str:
     """Optional: fetch a web page via Jina AI Reader (textified).
 
     This is useful when you want the model to cite/quote from specific pages
@@ -575,6 +588,19 @@ def jina_read(url: str, api_key: Optional[str] = None, timeout_s: int = 30, max_
                 if attempt < max_retries - 1:
                     wait_time = 5 * (attempt + 1)
                     print(f"[Jina] Server error {r.status_code}, retrying in {wait_time}s... (attempt {attempt + 1}/{max_retries})")
+                    time.sleep(wait_time)
+                    continue
+                raise last_error
+            if r.status_code == 429:
+                retry_after = r.headers.get("Retry-After")
+                if retry_after and retry_after.isdigit():
+                    wait_time = int(retry_after)
+                else:
+                    wait_time = min(5 * (2 ** attempt), 120)
+                wait_time *= (1 + random.uniform(0, 0.25))
+                last_error = RuntimeError(f"Jina Reader rate limited (429)")
+                if attempt < max_retries - 1:
+                    print(f"[Jina] Rate limited (429), waiting {wait_time:.1f}s... (attempt {attempt + 1}/{max_retries})")
                     time.sleep(wait_time)
                     continue
                 raise last_error
