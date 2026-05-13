@@ -3,3 +3,4 @@ __pycache__/
 .DS_Store
 readme-example.md
 configs/api.json
+configs/search_config.json
