@@ -1409,8 +1409,9 @@ def main():
     ap.add_argument("--max_retries", type=int, default=3, help="Max retries for rate limit errors")
 
     # Web search (Serper.dev)
-    ap.add_argument("--enable_search", action="store_true", help="Enable executable web/Lens search tools")
-    ap.add_argument("--search_config", type=str, default="", help="Path to search config JSON (serper_api_key, imgbb_api_key, jina_api_key, cache_dir, replay, ...)")
+    ap.add_argument("--enable_search", action="store_true", default=True, help="Enable web search tools (default: enabled)")
+    ap.add_argument("--no_search", action="store_true", default=False, help="Disable web search tools")
+    ap.add_argument("--search_config", type=str, default="configs/search_config.json", help="Path to search config JSON (serper_api_key, imgbb_api_key, jina_api_key, cache_dir, replay, ...)")
 
     # API config (recommended: use environment variables OPENAI_API_KEY / OPENAI_BASE_URL)
     ap.add_argument("--api_key", type=str, default="", help="API key (optional). Prefer setting OPENAI_API_KEY")
@@ -1502,7 +1503,7 @@ def main():
                         model=args.model,
                         temperature=args.temperature,
                         python_exe=args.python,
-                        enable_search=args.enable_search,
+                        enable_search=not args.no_search,
                         search_cfg_path=Path(args.search_config) if args.search_config else None,
                         max_rounds=args.max_rounds,
                         max_tool_calls=args.max_tool_calls,

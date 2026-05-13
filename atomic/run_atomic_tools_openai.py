@@ -741,8 +741,9 @@ def main():
     ap.add_argument("--api_config", type=str, default="")
 
     # Search options
-    ap.add_argument("--enable_search", action="store_true", help="Enable web search tools")
-    ap.add_argument("--search_config", type=str, default="", help="Path to search config JSON")
+    ap.add_argument("--enable_search", action="store_true", default=True, help="Enable web search tools (default: enabled)")
+    ap.add_argument("--no_search", action="store_true", default=False, help="Disable web search tools")
+    ap.add_argument("--search_config", type=str, default="configs/search_config.json", help="Path to search config JSON")
 
     # Image settings
     ap.add_argument("--max_image_pixels", type=int, default=2048*2048)
@@ -830,7 +831,7 @@ def main():
                         temperature=args.temperature,
                         max_rounds=args.max_rounds,
                         max_tool_calls=args.max_tool_calls,
-                        enable_search=bool(args.enable_search),
+                        enable_search=not args.no_search,
                         search_cfg_path=search_cfg_path,
                         max_image_pixels=args.max_image_pixels,
                         image_quality=args.image_quality,

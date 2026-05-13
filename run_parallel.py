@@ -98,7 +98,9 @@ def run_model(
     if images_dir:
         cmd.extend(["--images_dir", images_dir])
     if enable_search and search_config:
-        cmd.extend(["--enable_search", "--search_config", search_config])
+        cmd.extend(["--search_config", search_config])
+    elif not enable_search:
+        cmd.append("--no_search")
     cmd.extend(["--task_delay", str(task_delay)])
     cmd.extend(["--max_retries", str(max_retries)])
     if tasks_per_minute > 0:
@@ -155,8 +157,9 @@ def main():
     parser.add_argument("--temperature", type=float, default=0.0)
     parser.add_argument("--max_rounds", type=int, default=50)
     parser.add_argument("--max_tool_calls", type=int, default=50)
-    parser.add_argument("--enable_search", action="store_true")
-    parser.add_argument("--search_config", default="")
+    parser.add_argument("--enable_search", action="store_true", default=True, help="Enable web search tools (default: enabled)")
+    parser.add_argument("--no_search", action="store_true", default=False, help="Disable web search tools")
+    parser.add_argument("--search_config", default="configs/search_config.json")
     parser.add_argument("--max_tasks", type=int, default=0,
                         help="Max tasks per model (0 = unlimited)")
     parser.add_argument("--tasks", nargs="+", default=[],
@@ -213,7 +216,7 @@ def main():
                 max_tool_calls=args.max_tool_calls,
                 max_tasks=args.max_tasks,
                 tasks=args.tasks,
-                enable_search=args.enable_search,
+                enable_search=not args.no_search,
                 search_config=args.search_config,
                 task_delay=args.task_delay,
                 max_retries=args.max_retries,

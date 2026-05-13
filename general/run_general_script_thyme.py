@@ -1251,8 +1251,9 @@ def main():
     ap.add_argument("--task_delay", type=float, default=0.5, help="Delay in seconds between tasks")
 
     # Web search - SAME as OpenAI
-    ap.add_argument("--enable_search", action="store_true", help="Enable executable web/Lens search tools")
-    ap.add_argument("--search_config", type=str, default="", help="Path to search config JSON")
+    ap.add_argument("--enable_search", action="store_true", default=True, help="Enable web search tools (default: enabled)")
+    ap.add_argument("--no_search", action="store_true", default=False, help="Disable web search tools")
+    ap.add_argument("--search_config", type=str, default="configs/search_config.json", help="Path to search config JSON")
 
     # Image size control - SAME as OpenAI
     ap.add_argument("--max_image_pixels", type=int, default=2048*2048, 
@@ -1332,7 +1333,7 @@ def main():
                 model="thyme-rl",
                 temperature=args.temperature,
                 python_exe=args.python,
-                enable_search=args.enable_search,
+                enable_search=not args.no_search,
                 search_cfg_path=Path(args.search_config) if args.search_config else None,
                 max_rounds=args.max_rounds,
                 max_tool_calls=args.max_tool_calls,
